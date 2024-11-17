@@ -11,6 +11,13 @@
 #include "imp/imp_ivs.h"
 #include "imp/imp_ivs_move.h"
 
+#include <ivs/ivs_common.h>
+#include <ivs/ivs_interface.h>
+#include <ivs/ivs_inf_personDet.h>
+#include <imp/imp_ivs.h>
+
+#define NR_FRAMES_TO_IVS		200
+
 #if defined(PLATFORM_T31)
 #define IMPEncoderCHNAttr IMPEncoderChnAttr
 #define IMPEncoderCHNStat IMPEncoderChnStat
@@ -36,8 +43,11 @@ class Motion {
 
         std::atomic<bool> moving;
         std::atomic<bool> indicator;    
-        IMP_IVS_MoveParam move_param;
-        IMPIVSInterface *move_intf;
+        // IMP_IVS_MoveParam move_param;
+        persondet_param_input_t person_param;
+        // IMPIVSInterface *move_intf;
+        IMPIVSInterface *person_intf;
+
         std::thread detect_thread;
 
         IMPCell fs = {};

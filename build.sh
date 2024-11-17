@@ -110,35 +110,49 @@ deps() {
 	echo "import libimp"
 	cd 3rdparty
 	rm -rf ingenic-lib
+	rm -rf libimp-samples-musl
 	if [[ ! -d ingenic-lib ]]; then
-	git clone --depth=1 https://github.com/gtxaspec/ingenic-lib
-
+		git clone --depth=1 https://github.com/gtxaspec/ingenic-lib
+	fi
+	if [[ ! -d libimp-samples-musl ]]; then
+		git clone --depth=1 https://github.com/gtxaspec/libimp-samples-musl
+	fi
 	case "$1" in
 		T10|T20)
 			echo "use T20 libs"
 			cp ingenic-lib/T20/lib/3.12.0/uclibc/4.7.2/* $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/T10/lib/uclibc/IVS/. $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/T10/lib/uclibc/MXU/. $TOP/3rdparty/install/lib
+
 			;;
 		T21)
 			echo "use $1 libs"
 			cp ingenic-lib/$1/lib/1.0.33/uclibc/5.4.0/* $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/IVS/. $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/MXU/. $TOP/3rdparty/install/lib
 			;;
 		T23)
 			echo "use $1 libs"
 			cp ingenic-lib/$1/lib/1.1.0/uclibc/5.4.0/* $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/IVS/. $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/MXU/. $TOP/3rdparty/install/lib
 			;;
 		T30)
 			echo "use $1 libs"
 			cp ingenic-lib/$1/lib/1.0.5/uclibc/5.4.0/* $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/IVS/. $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/MXU/. $TOP/3rdparty/install/lib
 			;;
 		T31)
 			echo "use $1 libs"
 			cp ingenic-lib/$1/lib/1.1.6/uclibc/5.4.0/* $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/IVS/. $TOP/3rdparty/install/lib
+			cp -a libimp-samples-musl/$1/lib/uclibc/MXU/. $TOP/3rdparty/install/lib
 			;;
 		*)
 			echo "Unsupported or unspecified SoC model."
 			;;
 	esac
-	fi
 
 	cd ../
 

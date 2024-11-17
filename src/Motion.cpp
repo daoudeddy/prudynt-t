@@ -14,13 +14,16 @@ void Motion::detect()
 
     int ret;
     int debounce = 0;
-    IMP_IVS_MoveOutput *result;
+    // IMP_IVS_MoveOutput *result;
+    persondet_param_output_t *result;
+
     bool isInCooldown = false;
     auto cooldownEndTime = steady_clock::now();
     auto motionEndTime = steady_clock::now();
     auto startTime = steady_clock::now();
 
-    if(init() != 0) return;
+    if (init() != 0)
+        return;
 
     global_motion_thread_signal = true;
     while (global_motion_thread_signal)
@@ -62,32 +65,36 @@ void Motion::detect()
         }
 
         bool motionDetected = false;
-        for (int i = 0; i < IMP_IVS_MOVE_MAX_ROI_CNT; i++)
+        persondet_param_output_t *r = (persondet_param_output_t *)result;
+        for (int j = 0; j < r->count; j++)
         {
-            if (result->retRoi[i])
+            motionDetected = true;
+            LOG_INFO("Active motion detected in region " << j);
+            debounce++;
+            if (debounce >= cfg->motion.debounce_time)
             {
-                motionDetected = true;
-                LOG_INFO("Active motion detected in region " << i);
-                debounce++;
-                if (debounce >= cfg->motion.debounce_time)
+                if (!moving.load())
                 {
-                    if (!moving.load())
-                    {
-                        moving = true;
-                        LOG_INFO("Motion Start");
+                    moving = true;
+                    LOG_INFO("Motion Start");
 
-                        char cmd[128];
-                        memset(cmd, 0, sizeof(cmd));
-                        snprintf(cmd, sizeof(cmd), "%s start", cfg->motion.script_path);
-                        ret = system(cmd);
-                        if (ret != 0)
-                        {
-                            LOG_ERROR("Motion script failed:" << cmd);
-                        }
+                    IVSRect *rect = &r->person[j].show_box;
+
+                    char cmd[128];
+                    memset(cmd, 0, sizeof(cmd));
+                    snprintf(cmd, sizeof(cmd), "%s start", cfg->motion.script_path);
+                    ret = system(cmd);
+
+                    if (ret != 0)
+                    {
+                        LOG_ERROR("Motion script failed:" << cmd);
                     }
-                    indicator = true;
-                    motionEndTime = steady_clock::now(); // Update last motion time
+                    // printf("person location:%d, %d, %d, %d\n", rect->ul.x, rect->ul.y, rect->br.x, rect->br.y);
+                    // printf("person confidence:%f\n", r->person[j].confidence);
+                    LOG_INFO("Person detected:" << " left x: " << rect->ul.x << ", left y:" << rect->ul.y << ", right x:" << rect->br.x << ", right y:" << rect->br.y << ", confidence:" << (r->person[j].confidence * 100));
                 }
+                indicator = true;
+                motionEndTime = steady_clock::now(); // Update last motion time
             }
         }
 
@@ -130,8 +137,9 @@ int Motion::init()
 {
     LOG_INFO("Initialize motion detection.");
 
-    if((cfg->motion.monitor_stream == 0 && !cfg->stream0.enabled) || 
-       (cfg->motion.monitor_stream == 1 && !cfg->stream1.enabled)) {
+    if ((cfg->motion.monitor_stream == 0 && !cfg->stream0.enabled) ||
+        (cfg->motion.monitor_stream == 1 && !cfg->stream1.enabled))
+    {
 
         LOG_ERROR("Monitor stream is disabled, abort.");
         return -1;
@@ -141,7 +149,7 @@ int Motion::init()
     ret = IMP_IVS_CreateGroup(0);
     LOG_DEBUG_OR_ERROR_AND_EXIT(ret, "IMP_IVS_CreateGroup(0)");
 
-    //automatically set frame size / height 
+    // automatically set frame size / height
     ret = IMP_Encoder_GetChnAttr(cfg->motion.monitor_stream, &channelAttributes);
     if (ret == 0)
     {
@@ -160,38 +168,71 @@ int Motion::init()
         if (cfg->motion.roi_1_y == IVS_AUTO_VALUE)
         {
             cfg->set<int>(getConfigPath("roi_1_y"), channelAttributes.encAttr.picHeight - 1, true);
-        }        
+        }
     }
 
-    memset(&move_param, 0, sizeof(IMP_IVS_MoveParam));
+    memset(&person_param, 0, sizeof(persondet_param_input_t));
     // OSD is affecting motion for some reason.
     // Sensitivity range is 0-4
-    move_param.sense[0] = cfg->motion.sensitivity;
-    move_param.skipFrameCnt = cfg->motion.skip_frame_count;
-    move_param.frameInfo.width = cfg->motion.frame_width;
-    move_param.frameInfo.height = cfg->motion.frame_height;
+    person_param.frameInfo.width = cfg->motion.frame_width; // 800;
+    person_param.frameInfo.height = cfg->motion.frame_height;
 
-    LOG_INFO("Motion detection:" << 
-             " sensibility: " << move_param.sense[0] << 
-             ", skipCnt:" << move_param.skipFrameCnt << 
-             ", width:" << move_param.frameInfo.width << 
-             ", height:" << move_param.frameInfo.height);
+    person_param.skip_num = cfg->motion.skip_frame_count; // skip num
+    person_param.ptime = false;                           // print time or not
+    person_param.sense = cfg->motion.sensitivity;         // detection sensibility
+    person_param.detdist = 2;                             // detection distance
+    person_param.enable_perm = false;
+    person_param.enable_move = false;
+    person_param.permcnt = 2;
+    person_param.perms[0].pcnt = 6;
+    person_param.perms[1].pcnt = 5;
+    person_param.perms[0].p = (IVSPoint *)malloc(12 * sizeof(int));
+    person_param.perms[1].p = (IVSPoint *)malloc(12 * sizeof(int));
+    int i, j;
+    for (i = 0; i < person_param.permcnt; i++)
+    {
+        switch (i)
+        {
+        case 0:
+        {
+            for (j = 0; j < person_param.perms[0].pcnt; j++)
+            {
+                person_param.perms[0].p[j].x = (j % 3) * 140;
+                person_param.perms[0].p[j].y = (j / 3) * 340;
+            }
+        }
+        break;
+        case 1:
+        {
+            for (j = 0; j < person_param.perms[1].pcnt; j++)
+            {
+                person_param.perms[1].p[j].x = (j % 3) * 140 + 321;
+                person_param.perms[1].p[j].y = (j / 3) * 340;
+            }
+        }
+        break;
+        }
+    }
+    person_intf = PersonDetInterfaceInit(&person_param);
 
-    move_param.roiRect[0].p0.x = cfg->motion.roi_0_x;
-    move_param.roiRect[0].p0.y = cfg->motion.roi_0_y;
-    move_param.roiRect[0].p1.x = cfg->motion.roi_1_x - 1;
-    move_param.roiRect[0].p1.y = cfg->motion.roi_1_y - 1;
-    move_param.roiRectCnt = cfg->motion.roi_count;
+    // move_param.sense[0] = cfg->motion.sensitivity;
+    // move_param.skipFrameCnt = cfg->motion.skip_frame_count;
+    // move_param.frameInfo.width = cfg->motion.frame_width;
+    // move_param.frameInfo.height = cfg->motion.frame_height;
 
-    LOG_INFO("Motion detection roi[0]:" << 
-             " roi_0_x: " << cfg->motion.roi_0_x << 
-             ", roi_0_y:" << cfg->motion.roi_0_y << 
-             ", roi_1_x: " << cfg->motion.roi_1_x << 
-             ", roi_1_y:" << cfg->motion.roi_1_y);
+    // LOG_INFO("Motion detection:" << " sensibility: " << move_param.sense[0] << ", skipCnt:" << move_param.skipFrameCnt << ", width:" << move_param.frameInfo.width << ", height:" << move_param.frameInfo.height);
 
-    move_intf = IMP_IVS_CreateMoveInterface(&move_param);
+    // move_param.roiRect[0].p0.x = cfg->motion.roi_0_x;
+    // move_param.roiRect[0].p0.y = cfg->motion.roi_0_y;
+    // move_param.roiRect[0].p1.x = cfg->motion.roi_1_x - 1;
+    // move_param.roiRect[0].p1.y = cfg->motion.roi_1_y - 1;
+    // move_param.roiRectCnt = cfg->motion.roi_count;
 
-    ret = IMP_IVS_CreateChn(ivsChn, move_intf);
+    // LOG_INFO("Motion detection roi[0]:" << " roi_0_x: " << cfg->motion.roi_0_x << ", roi_0_y:" << cfg->motion.roi_0_y << ", roi_1_x: " << cfg->motion.roi_1_x << ", roi_1_y:" << cfg->motion.roi_1_y);
+
+    // move_intf = IMP_IVS_CreateMoveInterface(&move_param);
+
+    ret = IMP_IVS_CreateChn(ivsChn, person_intf);
     LOG_DEBUG_OR_ERROR_AND_EXIT(ret, "IMP_IVS_CreateChn(" << ivsChn << ", move_intf)");
 
     ret = IMP_IVS_RegisterChn(ivsGrp, ivsChn);
@@ -200,17 +241,15 @@ int Motion::init()
     ret = IMP_IVS_StartRecvPic(ivsChn);
     LOG_DEBUG_OR_ERROR_AND_EXIT(ret, "IMP_IVS_StartRecvPic(" << ivsChn << ")")
 
-    fs = { 
-        /**< Device ID */ DEV_ID_FS, 
-        /**< Group ID */  cfg->motion.monitor_stream, 
-        /**< output ID */ 1 
-    };
+    fs = {
+        /**< Device ID */ DEV_ID_FS,
+        /**< Group ID */ cfg->motion.monitor_stream,
+        /**< output ID */ 1};
 
-    ivs_cell = { 
-        /**< Device ID */ DEV_ID_IVS, 
-        /**< Group ID */  0, 
-        /**< output ID */ 0 
-    };
+    ivs_cell = {
+        /**< Device ID */ DEV_ID_IVS,
+        /**< Group ID */ 0,
+        /**< output ID */ 0};
 
     ret = IMP_System_Bind(&fs, &ivs_cell);
     LOG_DEBUG_OR_ERROR_AND_EXIT(ret, "IMP_System_Bind(&fs, &ivs_cell)");
@@ -239,7 +278,7 @@ int Motion::exit()
     ret = IMP_IVS_DestroyGroup(ivsGrp);
     LOG_DEBUG_OR_ERROR(ret, "IMP_IVS_DestroyGroup(0)");
 
-    IMP_IVS_DestroyMoveInterface(move_intf);
+    PersonDetInterfaceExit(person_intf);
 
     return ret;
 }
