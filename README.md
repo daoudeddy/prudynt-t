@@ -8,6 +8,10 @@
 - **Expanded Configuration**: Integrated support for **[libimp_control](https://github.com/gtxaspec/libimp_control)**.
 - **Thingino Integration**: Seamlessly integrates with **[thingino](https://github.com/themactep/thingino-firmware)**, enhancing connectivity and control options.
 
+## Note
+ Modify ```cat /etc/init.d/S95prudynt``` to ```COMMAND="/bin/env -- LD_PRELOAD='/lib/libimp_control.so /lib/libwebsockets.so' $DAEMON_FULL"```
+ without this prudynt will throw websocket error
+
 ## Contributing
 
 Contributions to prudynt-t are welcome! If you have improvements, bug fixes, or new features, please feel free to submit a pull request or open an issue.
